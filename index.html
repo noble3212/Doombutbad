@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Doom-like Raycasting Demo</title>
+    <title>Doom-like Raycasting with Rooms</title>
     <style>
         body { background: #222; margin: 0; overflow: hidden; }
         canvas { display: block; margin: 0 auto; background: #444; }
@@ -11,135 +11,180 @@
 <body>
 <canvas id="game" width="640" height="400"></canvas>
 <script>
-    const canvas = document.getElementById('game');
-    const ctx = canvas.getContext('2d');
-    const w = canvas.width, h = canvas.height;
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const w = canvas.width, h = canvas.height;
 
-    const map = [
-        [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-        [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-        [1,0,1,1,1,1,0,1,1,1,0,0,0,0,0,1],
-        [1,0,0,0,0,1,0,0,0,1,0,0,0,0,0,1],
-        [1,0,0,0,0,1,0,1,1,1,0,0,0,0,0,1],
-        [1,0,0,0,0,1,0,0,0,1,0,0,0,0,0,1],
-        [1,0,1,1,1,1,0,0,0,1,0,0,0,0,0,1],
-        [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-        [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-    ];
+// === Room Definitions (Reusable) ===
+const roomA = [
+    [1,1,1,1,1,1],
+    [1,0,0,0,0,1],
+    [1,0,0,0,0,1],
+    [1,0,0,0,0,1],
+    [1,1,1,1,1,1],
+];
 
-    const demons = [];
-    const mapW = map[0].length, mapH = map.length;
-    let posX = 3.5, posY = 3.5, dir = 0;
+const roomB = [
+    [1,1,1,1,1,1],
+    [1,0,0,0,0,1],
+    [1,0,1,0,0,1],
+    [1,0,0,0,0,1],
+    [1,1,1,1,1,1],
+];
 
-    class Demon {
-        constructor(x, y) {
-            this.x = x;
-            this.y = y;
-            this.health = 100;
-            this.speed = 0.02;
-            this.direction = Math.random() * 2 * Math.PI;
-        }
+// === Map Utility ===
+function stitchRoomsHorizontally(room1, room2) {
+    return room1.map((row, i) => [...row, 0, ...room2[i]]);
+}
 
-        moveTowardsPlayer(playerX, playerY) {
-            const angle = Math.atan2(playerY - this.y, playerX - this.x);
-            this.direction = angle;
-            this.move();
-        }
+// === Final Game Map ===
+const map = stitchRoomsHorizontally(roomA, roomB);
+const mapW = map[0].length, mapH = map.length;
 
-        move() {
-            this.x += Math.cos(this.direction) * this.speed;
-            this.y += Math.sin(this.direction) * this.speed;
-        }
+let posX = 2.5, posY = 2.5, dir = 0;
 
-        takeDamage(amount) {
-            this.health -= amount;
-            if (this.health <= 0) {
-                this.die();
+// === Pixel Art Demon ===
+const demonSprite = [
+    "....R....",
+    "...RRR...",
+    "..RRRRR..",
+    "..R.R.R..",
+    ".RRRRRRR.",
+    "...R.R...",
+    "..R...R..",
+    ".R.....R.",
+];
+
+function drawPixelSprite(sprite, x, y, scale = 2, color = "red") {
+    ctx.fillStyle = color;
+    for (let row = 0; row < sprite.length; row++) {
+        for (let col = 0; col < sprite[row].length; col++) {
+            if (sprite[row][col] !== '.') {
+                ctx.fillRect(
+                    x + col * scale,
+                    y + row * scale,
+                    scale,
+                    scale
+                );
             }
         }
+    }
+}
 
-        die() {
-            const index = demons.indexOf(this);
-            if (index !== -1) {
-                demons.splice(index, 1);
-            }
+// === Demon Logic ===
+const demons = [];
+
+class Demon {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.health = 100;
+        this.speed = 0.02;
+        this.direction = Math.random() * 2 * Math.PI;
+    }
+
+    moveTowardsPlayer(playerX, playerY) {
+        const angle = Math.atan2(playerY - this.y, playerX - this.x);
+        this.direction = angle;
+        this.move();
+    }
+
+    move() {
+        this.x += Math.cos(this.direction) * this.speed;
+        this.y += Math.sin(this.direction) * this.speed;
+    }
+
+    die() {
+        const index = demons.indexOf(this);
+        if (index !== -1) {
+            demons.splice(index, 1);
+        }
+    }
+
+    draw() {
+        drawPixelSprite(
+            demonSprite,
+            this.x * 40 - 8,
+            this.y * 40 - 8,
+            2,
+            "red"
+        );
+    }
+}
+
+function spawnDemons() {
+    demons.push(new Demon(3, 2));     // Room A
+    demons.push(new Demon(10, 2));    // Room B
+}
+
+// === Raycasting Rendering ===
+function render() {
+    ctx.clearRect(0, 0, w, h);
+    for (let x = 0; x < w; x++) {
+        const cameraX = 2 * x / w - 1;
+        const rayDir = dir + cameraX * Math.PI / 4;
+        let rayX = Math.cos(rayDir), rayY = Math.sin(rayDir);
+        let mapX = Math.floor(posX), mapY = Math.floor(posY);
+        let sideDistX, sideDistY;
+        const deltaDistX = Math.abs(1 / rayX);
+        const deltaDistY = Math.abs(1 / rayY);
+        let stepX, stepY;
+        let hit = 0, side;
+        if (rayX < 0) { stepX = -1; sideDistX = (posX - mapX) * deltaDistX; }
+        else { stepX = 1; sideDistX = (mapX + 1.0 - posX) * deltaDistX; }
+        if (rayY < 0) { stepY = -1; sideDistY = (posY - mapY) * deltaDistY; }
+        else { stepY = 1; sideDistY = (mapY + 1.0 - posY) * deltaDistY; }
+
+        while (!hit) {
+            if (sideDistX < sideDistY) { sideDistX += deltaDistX; mapX += stepX; side = 0; }
+            else { sideDistY += deltaDistY; mapY += stepY; side = 1; }
+            if (map[mapY][mapX] > 0) hit = 1;
         }
 
-        draw() {
-            ctx.fillStyle = 'red';
-            ctx.beginPath();
-            ctx.arc(this.x * 40, this.y * 40, 10, 0, Math.PI * 2);
-            ctx.fill();
-        }
+        let perpWallDist;
+        if (side === 0) perpWallDist = (mapX - posX + (1 - stepX) / 2) / rayX;
+        else perpWallDist = (mapY - posY + (1 - stepY) / 2) / rayY;
+        const lineHeight = Math.floor(h / perpWallDist);
+        const drawStart = Math.max(0, -lineHeight / 2 + h / 2);
+        const drawEnd = Math.min(h, lineHeight / 2 + h / 2);
+        ctx.strokeStyle = side ? "#888" : "#fff";
+        ctx.beginPath();
+        ctx.moveTo(x, drawStart);
+        ctx.lineTo(x, drawEnd);
+        ctx.stroke();
     }
 
-    function spawnDemons() {
-        demons.push(new Demon(5, 5));
-        demons.push(new Demon(2, 2));
-    }
-
-    function render() {
-        ctx.clearRect(0, 0, w, h);
-        for (let x = 0; x < w; x++) {
-            const cameraX = 2 * x / w - 1;
-            const rayDir = dir + cameraX * Math.PI / 4;
-            let rayX = Math.cos(rayDir), rayY = Math.sin(rayDir);
-            let mapX = Math.floor(posX), mapY = Math.floor(posY);
-            let sideDistX, sideDistY;
-            const deltaDistX = Math.abs(1 / rayX);
-            const deltaDistY = Math.abs(1 / rayY);
-            let stepX, stepY;
-            let hit = 0, side;
-            if (rayX < 0) { stepX = -1; sideDistX = (posX - mapX) * deltaDistX; }
-            else { stepX = 1; sideDistX = (mapX + 1.0 - posX) * deltaDistX; }
-            if (rayY < 0) { stepY = -1; sideDistY = (posY - mapY) * deltaDistY; }
-            else { stepY = 1; sideDistY = (mapY + 1.0 - posY) * deltaDistY; }
-            while (!hit) {
-                if (sideDistX < sideDistY) { sideDistX += deltaDistX; mapX += stepX; side = 0; }
-                else { sideDistY += deltaDistY; mapY += stepY; side = 1; }
-                if (map[mapY][mapX] > 0) hit = 1;
-            }
-            let perpWallDist;
-            if (side === 0) perpWallDist = (mapX - posX + (1 - stepX) / 2) / rayX;
-            else perpWallDist = (mapY - posY + (1 - stepY) / 2) / rayY;
-            const lineHeight = Math.floor(h / perpWallDist);
-            const drawStart = Math.max(0, -lineHeight / 2 + h / 2);
-            const drawEnd = Math.min(h, lineHeight / 2 + h / 2);
-            ctx.strokeStyle = side ? "#888" : "#fff";
-            ctx.beginPath();
-            ctx.moveTo(x, drawStart);
-            ctx.lineTo(x, drawEnd);
-            ctx.stroke();
-        }
-
-        demons.forEach(demon => {
-            demon.moveTowardsPlayer(posX, posY);
-            demon.draw();
-        });
-    }
-
-    function move(forward, turn) {
-        dir += turn;
-        const moveX = Math.cos(dir) * forward;
-        const moveY = Math.sin(dir) * forward;
-        if (map[Math.floor(posY)][Math.floor(posX + moveX)] === 0) posX += moveX;
-        if (map[Math.floor(posY + moveY)][Math.floor(posX)] === 0) posY += moveY;
-    }
-
-    document.addEventListener('keydown', e => {
-        if (e.key === 'ArrowUp') move(0.1, 0);
-        if (e.key === 'ArrowDown') move(-0.1, 0);
-        if (e.key === 'ArrowLeft') move(0, -0.1);
-        if (e.key === 'ArrowRight') move(0, 0.1);
+    demons.forEach(demon => {
+        demon.moveTowardsPlayer(posX, posY);
+        demon.draw();
     });
+}
 
-    function loop() {
-        render();
-        requestAnimationFrame(loop);
-    }
+// === Movement Controls ===
+function move(forward, turn) {
+    dir += turn;
+    const moveX = Math.cos(dir) * forward;
+    const moveY = Math.sin(dir) * forward;
+    if (map[Math.floor(posY)][Math.floor(posX + moveX)] === 0) posX += moveX;
+    if (map[Math.floor(posY + moveY)][Math.floor(posX)] === 0) posY += moveY;
+}
 
-    spawnDemons();
-    loop();
+document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowUp') move(0.1, 0);
+    if (e.key === 'ArrowDown') move(-0.1, 0);
+    if (e.key === 'ArrowLeft') move(0, -0.1);
+    if (e.key === 'ArrowRight') move(0, 0.1);
+});
+
+// === Start the Game ===
+spawnDemons();
+(function loop() {
+    render();
+    requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
 </script>
 </body>
 </html>
