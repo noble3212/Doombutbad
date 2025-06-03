@@ -15,7 +15,7 @@
     const ctx = canvas.getContext('2d');
     const w = canvas.width, h = canvas.height;
 
-    // Expanded map and this is how we'd handle it.
+    // Expanded map with second room
     const map = [
         [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
         [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1],
@@ -31,79 +31,10 @@
         [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
         [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
         [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-        ];
+    ];
 
     const mapW = map[0].length, mapH = map.length;
     let posX = 3.5, posY = 3.5, dir = 0;
-
-
-    function drawPixelSprite(sprite, x, y, scale = 2, color = "red") {
-        ctx.fillStyle = color;
-        for (let row = 0; row < sprite.length; row++) {
-            for (let col = 0; col < sprite[row].length; col++) {
-                if (sprite[row][col] !== '.') {
-                    ctx.fillRect(
-                        x + col * scale,
-                        y + row * scale,
-                        scale,
-                        scale
-                    );
-                }
-            }
-        }
-    }
-
-    const demons = [];
-
-    class Demon {
-        constructor(x, y) {
-            this.x = x;
-            this.y = y;
-            this.health = 100;
-            this.speed = 0.02;
-            this.direction = Math.random() * 2 * Math.PI;
-        }
-
-        moveTowardsPlayer(playerX, playerY) {
-            const angle = Math.atan2(playerY - this.y, playerX - this.x);
-            this.direction = angle;
-            this.move();
-        }
-
-        move() {
-            this.x += Math.cos(this.direction) * this.speed;
-            this.y += Math.sin(this.direction) * this.speed;
-        }
-
-        takeDamage(amount) {
-            this.health -= amount;
-            if (this.health <= 0) {
-                this.die();
-            }
-        }
-
-        die() {
-            const index = demons.indexOf(this);
-            if (index !== -1) {
-                demons.splice(index, 1);
-            }
-        }
-
-        draw() {
-            drawPixelSprite(
-                demonSprite,
-                this.x * 40 - 8, // Offset to center
-                this.y * 40 - 8,
-                2,
-                "red"
-            );
-        }
-    }
-
-    function spawnDemons() {
-        demons.push(new Demon(5, 5));
-        demons.push(new Demon(17, 2));
-    }
 
     function render() {
         ctx.clearRect(0, 0, w, h);
@@ -138,11 +69,6 @@
             ctx.lineTo(x, drawEnd);
             ctx.stroke();
         }
-
-        demons.forEach(demon => {
-            demon.moveTowardsPlayer(posX, posY);
-            demon.draw();
-        });
     }
 
     function move(forward, turn) {
@@ -165,8 +91,7 @@
         requestAnimationFrame(loop);
     }
 
-    spawnDemons();
-    loop();
+    loop(); // Start game loop without demons
 </script>
 </body>
 </html>
